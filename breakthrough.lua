@@ -110,14 +110,15 @@ function init_bricks()
   local brick_strength = 4
   local root = params:get("root_note")
   local scale = MusicUtil.SCALES[params:get("scale")]
-  local max_rand_note = #scale.intervals * params:get("octaves")
+  local max_rand_note = root + #scale.intervals * params:get("octaves")
   
   for x=1, bricks_wide do
     bricks[x] = {}
     for y=1, bricks_high do
 	    bricks[x][y] = {
 	      s = brick_strength,
-		  n = root + math.floor(math.random()*max_rand_note)
+        n = math.random(root + 1, max_rand_note),
+        r = false
 	    }
     end
   end
@@ -231,8 +232,8 @@ end
 function allclear(row)
   for x=1, bricks_wide do
     if bricks[x][row].s > 0 then
-	  return false
-	end
+	    return false
+	  end
   end
   return true
 end
@@ -246,35 +247,40 @@ function updateball(b)
   local maxx = 126
   local maxy = 62
   
-  if b.y >= maxy then
-    b.y = maxy
+  if b.y >= maxy or b.y <= miny then
+    b.y = b.y >= maxy and maxy or miny
     b.a = math.pi - b.a
-	enqueue_note(1)
+    if not b.r then
+      enqueue_note(1)
+    end
+  elseif b.r and b.y > (bricks_high + 1) * (brick_height + brick_margin) then
+    b.r = false
   else
-    -- calc brick x idx at ball xpcalc
-	local brick_x = util.clamp(math.ceil(b.x / (brick_width + brick_margin)), 1, bricks_wide)
 
-	-- figure out which brick at this x has strength
-	local brick_y = getballbrick(brick_x)	
-	if brick_y == 0 and b.y <= miny then
-	  b.y = miny
+    -- calc brick x idx at ball xpcalc
+	  local brick_x = util.clamp(math.ceil(b.x / (brick_width + brick_margin)), 1, bricks_wide)
+
+	  -- figure out which brick at this x has strength
+	  local brick_y = getballbrick(brick_x)	
+    if b.y <= ((brick_height + brick_margin) * brick_y) + miny and not b.r then
+      enqueue_note(bricks[brick_x][brick_y].n)
+	  
+      -- reduce strength of hit brick
+      bricks[brick_x][brick_y].s = bricks[brick_x][brick_y].s - 1
+      if bricks[brick_x][brick_y].s < 0 then
+        bricks[brick_x][brick_y].s = 0
+      end
+      
+      -- if all bricks are clear
+      if brick_y == 1 and allclear(1) then
+        for n=1,#balls do
+          balls[n].r = true
+        end
+        init_bricks()
+      end
+      
+      --b.y = ((brick_height + brick_margin) * brick_y) + miny
       b.a = math.pi - b.a
-	elseif brick_y > 0 and b.y <= ((brick_height + brick_margin) * brick_y) + miny then
-	  enqueue_note(bricks[brick_x][brick_y].n)
-	  
-	  -- reduce strength of hit brick
-	  bricks[brick_x][brick_y].s = bricks[brick_x][brick_y].s - 1
-	  if bricks[brick_x][brick_y].s < 0 then
-		bricks[brick_x][brick_y].s = 0
-	  end
-	  
-	  -- if all bricks are clear
-	  if brick_y == 1 and allclear(1) then
-	    init_bricks()
-	  end
-	  
-	  b.y = ((brick_height + brick_margin) * brick_y) + miny
-	  b.a = math.pi - b.a
   
     elseif b.x >= maxx then
       b.x = maxx
@@ -283,6 +289,7 @@ function updateball(b)
       b.x = minx
       b.a = 2*math.pi - b.a
     end
+
   end
 end
 
