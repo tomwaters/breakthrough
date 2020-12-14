@@ -70,6 +70,10 @@ function init()
   params:add_number("octaves", "octaves", 1, 9, 2)
   params:set_action("octaves", build_scale)
 
+  local wall_options = {"None", "All", "Selected"}
+  params:add{type = "number", id = "walls", name = "wall note orbs", 
+    min = 1, max = 3, default = 3, formatter = function(param) return wall_options[param:get()] end}
+
   params:add_separator()
 
   cs.AMP = cs.new(0,1,'lin',0,0.5,'')
@@ -250,7 +254,7 @@ function updateball(b)
   if b.y >= maxy or b.y <= miny then
     b.y = b.y >= maxy and maxy or miny
     b.a = math.pi - b.a
-    if not b.r then
+    if not b.r and (params:get("walls") == 2 or (params:get("walls") == 3 and i == cur_ball)) then
       enqueue_note(1)
     end
   elseif b.r and b.y > (bricks_high + 1) * (brick_height + brick_margin) then
