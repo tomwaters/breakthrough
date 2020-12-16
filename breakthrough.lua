@@ -162,7 +162,7 @@ end
 
 function update()
   for i=1,#balls do
-    updateball(balls[i])
+    updateball(i)
   end
   redraw()
 end
@@ -242,7 +242,8 @@ function allclear(row)
   return true
 end
 
-function updateball(b)
+function updateball(i)
+  local b = balls[i]
   b.x = b.x + math.sin(b.a)*b.v
   b.y = b.y + math.cos(b.a)*b.v
 
