@@ -6,7 +6,10 @@
 -- key3: select next orb
 -- enc2: rotate orb^s
 -- enc3: accelerate orb^s
-
+--
+-- key1 + key3: game mode!
+-- enC£: move
+--
 -- by tomw
 -- rebound by nf, okyeron
 
@@ -39,6 +42,13 @@ local min_note = 0
 local max_note = 127
 
 local shift = false
+
+--0 = not game mode, 1 = game play, 2 = game over
+local game_state = 0
+local game_score = 0
+local game_level = 0
+local game_pos = 0
+local game_width = 0
 
 function init()
   screen.aa(1)
@@ -103,15 +113,12 @@ function init()
   
   params:bang()
   
-  init_bricks()
-  table.insert(balls, newball())
-  cur_ball = #balls
-  
+  reset()
   clock.run(pulse)
 end
 
 function init_bricks()
-  local brick_strength = 4
+  local brick_strength = game_state == 0 and 4 or 1
   local root = params:get("root_note")
   local scale = MusicUtil.SCALES[params:get("scale")]
   local max_rand_note = root + #scale.intervals * params:get("octaves")
@@ -147,7 +154,7 @@ function redraw()
 	  local start_y = ((y - 1) * (brick_height + brick_margin)) + brick_margin
     for x=1, bricks_wide do
 	    local start_x = ((x - 1) * (brick_width + brick_margin)) + brick_margin
-	    screen.level(3 * bricks[x][y].s)
+	    screen.level(bricks[x][y].s * (game_state == 0 and 3 or 12))
 	    screen.rect(start_x, start_y, brick_width, brick_height)
 	    screen.fill()
 	  end
@@ -157,6 +164,30 @@ function redraw()
     drawball(balls[i], i == cur_ball)
   end
   
+  if game_state > 0 then
+    local half_paddle = game_width / 2
+    screen.line_width(2)
+    screen.move(game_pos - half_paddle, 62)
+    screen.line(game_pos + half_paddle, 62)
+    screen.stroke()
+  end
+
+  if game_state == 2 then
+    screen.level(4)
+    screen.rect(6, 6, screen_width - 12, 52)
+    screen.fill()
+
+    screen.level(15)
+    screen.move(64, 20)
+    screen.text_center("Game Over!")
+    screen.move(64, 30)
+    screen.text_center("You Reached Level: " .. game_level)
+    screen.move(64, 40)
+    screen.text_center("You Scored: " .. game_score)
+    screen.move(64, 50)
+    screen.text_center("Press K3 to try again")
+  end
+
   screen.update()
 end
 
@@ -168,7 +199,7 @@ function update()
 end
 
 function enc(n,d)
-  if n == 2 then
+  if n == 2 and game_state == 0 then
     -- rotate
     for i=1,#balls do
       if shift or i == cur_ball then
@@ -176,11 +207,17 @@ function enc(n,d)
       end
     end
   elseif n == 3 then
-    -- accelerate
-    for i=1,#balls do
-      if shift or i == cur_ball then
-        balls[i].v = balls[i].v + d/10
+    if game_state == 0 then
+      -- accelerate
+      for i=1,#balls do
+        if shift or i == cur_ball then
+          balls[i].v = balls[i].v + d/10
+        end
       end
+    else
+      -- move paddle
+      local half_paddle = game_width / 2
+      game_pos = util.clamp(game_pos + d, half_paddle, screen_width - half_paddle)
     end
   end
 end
@@ -189,7 +226,7 @@ function key(n,z)
   if n == 1 then
     -- shift
     shift = z == 1
-  elseif n == 2 and z == 1 then
+  elseif n == 2 and z == 1 and game_state == 0 then
     if shift then
       -- remove ball
       table.remove(balls, cur_ball)
@@ -201,18 +238,57 @@ function key(n,z)
       table.insert(balls, newball())
       cur_ball = #balls
     end
-  elseif n == 3 and z == 1 and not shift and #balls > 0 then
-    -- select next ball
-    cur_ball = cur_ball%#balls+1
+  elseif n == 3 and z == 1 then
+    if shift then
+      if game_state == 0 then
+        gamemode()
+      else
+        game_state = 0
+        reset()
+      end
+    elseif game_state == 2 then
+      gamemode()
+    elseif #balls > 0 then
+      -- select next ball
+      cur_ball = cur_ball%#balls+1
+    end
   end
+end
+
+function reset()
+  init_bricks()
+  balls = {}
+  table.insert(balls, newball())
+  cur_ball = #balls
+end
+
+function gamemode()
+  game_state = 1
+  game_score = 0
+  game_level = 1
+  game_width = 30
+  game_pos = 64
+  reset()
+end
+
+function gamelevelup()
+  game_score = game_score + 10
+  game_level = game_level + 1
+  game_width = util.clamp(game_width - 6, 6, 30)
+  balls[1].v = util.clamp(balls[1].v + 0.1, 0, 2)
+end
+
+function gameover()
+  game_state = 2
+  balls = {}
 end
 
 function newball()
   return {
     x = 64,
     y = 60,
-    v = 0.5*math.random()+0.5,
-    a = math.random()*2*math.pi
+    v = game_state == 0 and 0.5*math.random()+0.5 or 0.6,
+    a = game_state == 0 and math.random()*2*math.pi or 1
   }
 end
 
@@ -242,13 +318,19 @@ function updateball(i)
   local minx = 2
   local miny = 2
   local maxx = 126
-  local maxy = 62
+  local maxy = game_state == 0 and 62 or 60
   
   if b.y >= maxy or b.y <= miny then
-    b.y = b.y >= maxy and maxy or miny
-    b.a = math.pi - b.a
-    if not b.r and (params:get("walls") == 2 or (params:get("walls") == 3 and i == cur_ball)) then
-      enqueue_note(1)
+    local half_paddle = game_width / 2
+
+    if game_state == 0 or b.y <= miny or (b.y >= maxy and b.x >= game_pos - half_paddle and b.x <= game_pos + half_paddle) then
+      b.y = b.y >= maxy and maxy or miny
+      b.a = math.pi - b.a
+      if not b.r and (params:get("walls") == 2 or (params:get("walls") == 3 and i == cur_ball)) then
+        enqueue_note(1)
+      end
+    else
+      gameover()
     end
   elseif b.x >= maxx or b.x <= minx then
     b.x = b.x >= maxx and maxx or minx
@@ -265,8 +347,9 @@ function updateball(i)
 
       -- reduce strength of hit brick
       bricks[brick_x][brick_y].s = bricks[brick_x][brick_y].s - 1
-      if bricks[brick_x][brick_y].s < 0 then
+      if bricks[brick_x][brick_y].s <= 0 then
         bricks[brick_x][brick_y].s = 0
+        game_score = game_score + 1
       end
       
       -- if all bricks are clear
@@ -275,6 +358,7 @@ function updateball(i)
           balls[n].r = true
         end
         init_bricks()
+        gamelevelup()
       end
 
       local brickYMax = (brick_height + brick_margin) * brick_y
