@@ -73,7 +73,7 @@ function init()
   local wall_options = {"None", "All", "Selected"}
   params:add{type = "number", id = "walls", name = "wall note orbs", 
     min = 1, max = 3, default = 3, formatter = function(param) return wall_options[param:get()] end}
-
+  
   params:add_separator()
 
   cs.AMP = cs.new(0,1,'lin',0,0.5,'')
@@ -210,7 +210,7 @@ end
 function newball()
   return {
     x = 64,
-    y = 64,
+    y = 60,
     v = 0.5*math.random()+0.5,
     a = math.random()*2*math.pi
   }
@@ -220,16 +220,6 @@ function drawball(b, hilite)
   screen.level(hilite and 15 or 5)
   screen.circle(b.x, b.y, hilite and 2 or 1.5)
   screen.fill()
-end
-
--- figure out which brick at this x has strength
-function getballbrick(brick_x)
-  for y=bricks_high, 1, -1 do
-    if bricks[brick_x][y].s > 0 then
-	  return y
-	end
-  end
-  return 0
 end
 
 --- check if all bricks in this row are clear
@@ -244,6 +234,8 @@ end
 
 function updateball(i)
   local b = balls[i]
+  local oldX = b.x
+  local oldY = b.y
   b.x = b.x + math.sin(b.a)*b.v
   b.y = b.y + math.cos(b.a)*b.v
 
@@ -258,18 +250,19 @@ function updateball(i)
     if not b.r and (params:get("walls") == 2 or (params:get("walls") == 3 and i == cur_ball)) then
       enqueue_note(1)
     end
+  elseif b.x >= maxx or b.x <= minx then
+    b.x = b.x >= maxx and maxx or minx
+    b.a = 2*math.pi - b.a
   elseif b.r and b.y > (bricks_high + 1) * (brick_height + brick_margin) then
     b.r = false
-  else
+  elseif not b.r and b.y <= bricks_high * (brick_height + brick_margin) then
 
-    -- calc brick x idx at ball xpcalc
+    -- figure out which brick we might be in
 	  local brick_x = util.clamp(math.ceil(b.x / (brick_width + brick_margin)), 1, bricks_wide)
-
-	  -- figure out which brick at this x has strength
-	  local brick_y = getballbrick(brick_x)	
-    if b.y <= ((brick_height + brick_margin) * brick_y) + miny and not b.r then
+    local brick_y = util.clamp(math.ceil(b.y / (brick_height + brick_margin)), 1, bricks_high)
+    if bricks[brick_x][brick_y].s > 0 then
       enqueue_note(bricks[brick_x][brick_y].n)
-	  
+
       -- reduce strength of hit brick
       bricks[brick_x][brick_y].s = bricks[brick_x][brick_y].s - 1
       if bricks[brick_x][brick_y].s < 0 then
@@ -283,18 +276,17 @@ function updateball(i)
         end
         init_bricks()
       end
-      
-      --b.y = ((brick_height + brick_margin) * brick_y) + miny
-      b.a = math.pi - b.a
-  
-    elseif b.x >= maxx then
-      b.x = maxx
-      b.a = 2*math.pi - b.a
-    elseif b.x <= minx then
-      b.x = minx
-      b.a = 2*math.pi - b.a
-    end
 
+      local brickYMax = (brick_height + brick_margin) * brick_y
+      if oldY <= brickYMax and oldY >= brickYMax - brick_height then
+        b.a = 2*math.pi - b.a  
+      else
+        b.a = math.pi - b.a
+      end
+      
+      b.x = oldX
+      b.y = oldY
+    end
   end
 end
 
