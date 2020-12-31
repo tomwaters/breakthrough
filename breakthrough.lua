@@ -9,7 +9,7 @@
 -- enc3: accelerate orb^s
 --
 -- key1 + key3: game mode!
--- enC£: move
+-- enc3: move
 --
 -- by tomw
 -- rebound by nf, okyeron
@@ -85,6 +85,8 @@ function init()
   params:add{type = "number", id = "walls", name = "wall note orbs", 
     min = 1, max = 3, default = 3, formatter = function(param) return wall_options[param:get()] end}
   
+  params:add{type= "number", id = "density", name = "brick density",
+    min = 10, max = 100, default = 100, formatter = function(param) return param:get().."%" end}
   params:add_separator()
 
   cs.AMP = cs.new(0,1,'lin',0,0.5,'')
@@ -123,12 +125,13 @@ function init_bricks()
   local root = params:get("root_note")
   local scale = MusicUtil.SCALES[params:get("scale")]
   local max_rand_note = root + #scale.intervals * params:get("octaves")
+  local brick_density = params:get("density") / 100
   
   for x=1, bricks_wide do
     bricks[x] = {}
     for y=1, bricks_high do
 	    bricks[x][y] = {
-	      s = brick_strength,
+	      s = math.random() <= brick_density and brick_strength or 0,
         n = math.random(root + 1, max_rand_note),
         r = false
 	    }
@@ -299,12 +302,14 @@ function drawball(b, hilite)
   screen.fill()
 end
 
---- check if all bricks in this row are clear
-function allclear(row)
-  for x=1, bricks_wide do
-    if bricks[x][row].s > 0 then
-	    return false
-	  end
+--- check if all bricks are clear
+function allclear()
+  for y=1, bricks_high do
+	  for x=1, bricks_wide do
+	    if bricks[x][y].s > 0 then 
+	      return false
+	    end
+    end
   end
   return true
 end
@@ -351,15 +356,15 @@ function updateball(i)
       if bricks[brick_x][brick_y].s <= 0 then
         bricks[brick_x][brick_y].s = 0
         game_score = game_score + 1
-      end
-      
-      -- if all bricks are clear
-      if brick_y == 1 and allclear(1) then
-        for n=1,#balls do
-          balls[n].r = true
+
+        -- if all bricks are clear
+        if allclear() then
+          for n=1,#balls do
+            balls[n].r = true
+          end
+          init_bricks()
+          gamelevelup()
         end
-        init_bricks()
-        gamelevelup()
       end
 
       local brickYMax = (brick_height + brick_margin) * brick_y
