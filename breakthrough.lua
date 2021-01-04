@@ -87,24 +87,27 @@ function init()
   
   params:add{type= "number", id = "density", name = "brick density",
     min = 10, max = 100, default = 100, formatter = function(param) return param:get().."%" end}
-  params:add_separator()
+
+  params:add{type= "number", id = "super orb", name = "super orb",
+    min = 0, max = 100, default = 10, formatter = function(param) return param:get().."%" end}
+  params:add_separator()  
 
   cs.AMP = cs.new(0,1,'lin',0,0.5,'')
   params:add_control("amp", "amp", cs.AMP)
   params:set_action("amp",
   function(x) engine.amp(x) end)
 
-  cs.PW = cs.new(0,100,'lin',0,80,'%')
+  cs.PW = cs.new(0,100,'lin',0,60,'%')
   params:add_control("pw", "pw", cs.PW)
   params:set_action("pw",
   function(x) engine.pw(x/100) end)
 
-  cs.REL = cs.new(0.1,3.2,'lin',0,0.2,'s')
+  cs.REL = cs.new(0.1,3.2,'lin',0,0.8,'s')
   params:add_control("release", "release", cs.REL)
   params:set_action("release",
   function(x) engine.release(x) end)
 
-  cs.CUT = cs.new(50,5000,'exp',0,555,'hz')
+  cs.CUT = cs.new(50,5000,'exp',0,1500,'hz')
   params:add_control("cutoff", "cutoff", cs.CUT)
   params:set_action("cutoff",
   function(x) engine.cutoff(x) end)
@@ -292,7 +295,8 @@ function newball()
     x = 64,
     y = 60,
     v = game_state == 0 and 0.5*math.random()+0.5 or 0.6,
-    a = game_state == 0 and math.random()*2*math.pi or 1
+    a = game_state == 0 and math.random()*2*math.pi or 1,
+    s = false
   }
 end
 
@@ -341,8 +345,9 @@ function updateball(i)
   elseif b.x >= maxx or b.x <= minx then
     b.x = b.x >= maxx and maxx or minx
     b.a = 2*math.pi - b.a
-  elseif b.r and b.y > (bricks_high + 1) * (brick_height + brick_margin) then
+  elseif b.y > (bricks_high + 1) * (brick_height + brick_margin) then
     b.r = false
+    b.s = math.random() <= (params:get("super orb") / 100)
   elseif not b.r and b.y <= bricks_high * (brick_height + brick_margin) then
 
     -- figure out which brick we might be in
@@ -352,10 +357,13 @@ function updateball(i)
       enqueue_note(bricks[brick_x][brick_y].n)
 
       -- reduce strength of hit brick
-      bricks[brick_x][brick_y].s = bricks[brick_x][brick_y].s - 1
+      bricks[brick_x][brick_y].s = b.s and 0 or bricks[brick_x][brick_y].s - 1
       if bricks[brick_x][brick_y].s <= 0 then
         bricks[brick_x][brick_y].s = 0
-        game_score = game_score + 1
+        
+        if game_state > 0 then
+          game_score = game_score + 1
+        end
 
         -- if all bricks are clear
         if allclear() then
@@ -363,19 +371,25 @@ function updateball(i)
             balls[n].r = true
           end
           init_bricks()
-          gamelevelup()
+          
+          if game_state > 0 then
+            gamelevelup()
+          end
         end
       end
 
-      local brickYMax = (brick_height + brick_margin) * brick_y
-      if oldY <= brickYMax and oldY >= brickYMax - brick_height then
-        b.a = 2*math.pi - b.a  
-      else
-        b.a = math.pi - b.a
+      -- if this isn't a super ball, bounce off the brick
+      if b.s == false then
+        local brickYMax = (brick_height + brick_margin) * brick_y
+        if oldY <= brickYMax and oldY >= brickYMax - brick_height then
+          b.a = 2*math.pi - b.a  
+        else
+          b.a = math.pi - b.a
+        end
+        
+        b.x = oldX
+        b.y = oldY
       end
-      
-      b.x = oldX
-      b.y = oldY
     end
   end
 end
